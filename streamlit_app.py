@@ -27,6 +27,7 @@ def preprocess_data(hist_data, scaler, time_step=60):
 def load_lstm_model(model_path):
     model = tf.keras.models.load_model(model_path)
     return model
+
 # Function to predict the next day
 def predict_next_day(model, last_60_days_scaled):
     last_60_days_scaled = last_60_days_scaled.reshape(1, 60, 1)
@@ -65,33 +66,54 @@ def main():
             # Predict on historical data
             X = X.reshape(X.shape[0], X.shape[1], 1)
             predicted = lstm_model.predict(X)
-            predicted_prices = scaler.inverse_transform(predicted)            # Plot the predicted prices alongside actual closing prices
-            actual_prices = hist_data['Close'].values[-len(predicted_prices):]
-            predicted_dates = hist_data.index[-len(predicted_prices):]
+            predicted_prices = scaler.inverse_transform(predicted).flatten()
 
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=predicted_dates, y=actual_prices, mode='lines', name='Actual Price'))
-            fig.add_trace(go.Scatter(x=predicted_dates, y=predicted_prices.flatten(), mode='lines', name='Predicted Price'))
+            # Ensure there's enough data for plotting
+            if len(predicted_prices) > 0:
+                actual_prices = hist_data['Close'].values[-len(predicted_prices):]
+                predicted_dates = hist_data.index[-len(predicted_prices):]
 
-            # Forecast the next 7 days
-            forecast_prices = []
-            forecast_dates = [predicted_dates[-1] + timedelta(days=i) for i in range(1, 8)]
-            last_60_days_scaled = scaler.transform(hist_data['Close'].values[-60:].reshape(-1, 1))
+                # Create a DataFrame for actual and predicted prices
+                prices_df = pd.DataFrame({
+                    'Date': predicted_dates,
+                    'Actual Price': actual_prices,
+                    'Predicted Price': predicted_prices
+                })
 
-            for _ in range(7):
-                next_day_price_scaled = predict_next_day(lstm_model, last_60_days_scaled)
-                forecast_prices.append(scaler.inverse_transform(next_day_price_scaled)[0, 0])
+                # Calculate variance (difference)
+                prices_df['Variance'] = prices_df['Actual Price'] - prices_df['Predicted Price']
 
-                # Update last 60 days with the new prediction
-                last_60_days_scaled = np.append(last_60_days_scaled[1:], next_day_price_scaled, axis=0)
+                # Display the DataFrame in Streamlit
+                st.write("Actual vs Predicted Prices with Variance:")
+                st.dataframe(prices_df)
 
-            fig.add_trace(go.Scatter(x=forecast_dates, y=forecast_prices, mode='lines+markers', name='7-Day Forecast'))
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=predicted_dates, y=actual_prices, mode='lines', name='Actual Price'))
+                fig.add_trace(go.Scatter(x=predicted_dates, y=predicted_prices, mode='lines', name='Predicted Price'))
 
-            fig.update_layout(title='Predicted vs Actual Stock Prices with 7-Day Forecast', xaxis_title='Date', yaxis_title='Price')
-            
-            st.plotly_chart(fig)
+                # Forecast the next 7 days
+                forecast_prices = []
+                forecast_dates = [predicted_dates[-1] + timedelta(days=i) for i in range(1, 8)]
+                last_60_days_scaled = scaler.transform(hist_data['Close'].values[-60:].reshape(-1, 1))
+
+                for _ in range(7):
+                    next_day_price_scaled = predict_next_day(lstm_model, last_60_days_scaled)
+                    forecast_prices.append(scaler.inverse_transform(next_day_price_scaled)[0, 0])
+
+                    # Update last 60 days with the new prediction
+                    last_60_days_scaled = np.append(last_60_days_scaled[1:], next_day_price_scaled, axis=0)
+
+                fig.add_trace(go.Scatter(x=forecast_dates, y=forecast_prices, mode='lines+markers', name='7-Day Forecast'))
+
+                fig.update_layout(title='Predicted vs Actual Stock Prices with 7-Day Forecast', xaxis_title='Date', yaxis_title='Price')
+                
+                st.plotly_chart(fig)
+            else:
+                st.error("Insufficient data for prediction.")
 
 if __name__ == "__main__":
     main()
+
+
 
 
