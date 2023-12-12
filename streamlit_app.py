@@ -8,7 +8,7 @@ import plotly.graph_objs as go
 from datetime import timedelta
 
 # Function to fetch historical data
-def fetch_historical_data(ticker, period="1y", interval="1d"):
+def fetch_historical_data(ticker, period="1y", interval="1h"):
     stock_data = yf.Ticker(ticker)
     hist_data = stock_data.history(period=period, interval=interval)
     return hist_data
